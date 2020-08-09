@@ -4,10 +4,10 @@ import torchvision.utils
 import torch.nn as nn
 
 
-class SiameseNetwork(nn.Module):
-    def __init__(self, pretrained=True):
+class jNetwork(nn.Module):
+    def __init__(self):
 
-        super(SiameseNetwork, self).__init__()
+        super(jNetwork, self).__init__()
 
         self.seq1 = nn.Sequential(nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
                                           nn.ReLU(inplace=True),
@@ -48,6 +48,18 @@ class SiameseNetwork(nn.Module):
             nn.Linear(4096, 1),
         )
 
+        torch.nn.init.xavier_uniform_(self.seq1[0].weight)
+        torch.nn.init.xavier_uniform_(self.seq2[0].weight)
+        torch.nn.init.xavier_uniform_(self.seq3[0].weight)
+        torch.nn.init.xavier_uniform_(self.seq4[0].weight)
+        torch.nn.init.xavier_uniform_(self.seq5[0].weight)
+        torch.nn.init.xavier_uniform_(self.joint1[0].weight)
+        torch.nn.init.xavier_uniform_(self.joint2[0].weight)
+        torch.nn.init.xavier_uniform_(self.joint3[0].weight)
+        torch.nn.init.xavier_uniform_(self.classifier[1].weight)
+        torch.nn.init.xavier_uniform_(self.classifier[4].weight)
+        torch.nn.init.xavier_uniform_(self.classifier[6].weight)
+
     def forward(self, input1, input2):
 
         output1 = self.seq1(input1)
@@ -72,6 +84,6 @@ class SiameseNetwork(nn.Module):
         output = torch.flatten(output, 1)
         output = self.classifier(output)
 
-        output = torch.sigmoid(output)
+        # output = torch.sigmoid(output)
 
         return output

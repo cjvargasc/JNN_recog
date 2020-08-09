@@ -3,17 +3,19 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch import optim
+import torch.nn as nn
 import torchvision
-
-import torch.nn.functional as F
-
-from lossfunction.contrastive import ContrastiveLoss
+#import torch.nn.functional as F
+#from lossfunction.contrastive import ContrastiveLoss
 from loaders.datasetBatch import SiameseNetworkDataset  # Change this import to switch between dataset loaders
-#from loaders.dataseBatchAndNeg import SiameseNetworkDataset
-#from loaders.datasetRandom import SiameseNetworkDataset
-from models import jAlexnet
+
+from models.jAlexnet import jNetwork
+from models.jAlexnet2 import jNetwork2
+#from models.Alexnet import SiameseNetwork
 from misc.misc import Utils
 from params.config import Config
+
+from lossfunction.contrastive import ContrastiveLoss
 
 import time
 
@@ -42,23 +44,37 @@ class Trainer:
         print("batch:  ", Config.train_batch_size)
         print("epochs: ", Config.train_number_epochs)
 
-        net = jAlexnet(Config.pretrained)  # Model dependant from import
-        net.train()
-
-        #criterion = ContrastiveLoss()
-
-        optimizer = optim.SGD(net.parameters(), lr=Config.lrate)  # or net.net_parameters
+        net = jNetwork()
+        #net = SiameseNetwork(pretrained=False)
+        optimizer = optim.SGD(net.parameters(), lr=Config.lrate)
 
         counter = []
         loss_history = []
         iteration_number = 0
 
         best_loss = 10**15  # Random big number (bigger than the initial loss)
+        starting_ep = 0
         best_epoch = 0
         break_counter = 0  # break after 20 epochs without loss improvement
 
+        if Config.continue_training:
+            print("Continue training:")
+            checkpoint = torch.load(Config.model_path)
+            net.load_state_dict(checkpoint['model_state_dict'])
+            optimizer = optim.SGD(net.parameters(), lr=Config.lrate)
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            starting_ep = checkpoint['epoch'] + 1
+            best_loss = checkpoint['loss']
+            print("epoch: ", starting_ep, ", loss: ", best_loss)
 
-        for epoch in range(0, Config.train_number_epochs):
+        net.cuda()
+
+        net.train()
+
+        criterion = ContrastiveLoss()
+        bce = nn.BCEWithLogitsLoss(reduction='mean')
+
+        for epoch in range(starting_ep, Config.train_number_epochs):
 
             average_epoch_loss = 0
             count = 0
@@ -72,12 +88,16 @@ class Trainer:
                 #concatenated = torch.cat((data[0], data[1]), 0)
                 #Utils.imshow(torchvision.utils.make_grid(concatenated))
 
-                output1, output2, scores = net(img0, img1)
+                confidence = net(img0, img1)
+                #output1, output2 = net(img0, img1)
 
                 optimizer.zero_grad()
 
                 #loss_contrastive = criterion(output1, output2, label)
-                loss_contrastive = F.binary_cross_entropy_with_logits(scores, label) # Koch last layer only
+                #loss_contrastive = F.binary_cross_entropy_with_logits(confidence, label) # Koch last layer only
+
+                loss_contrastive = bce(confidence, label)
+                #loss_contrastive = criterion(confidence, label)
 
                 #print(loss_contrastive)
 
@@ -91,28 +111,47 @@ class Trainer:
             end_time = time.time() - start_time
             print("eproch timer: (secs) ", end_time)
 
-            iteration_number += 1
             average_epoch_loss = average_epoch_loss / count
             #print(count)
 
             print("Epoch number {}\n Current loss {}\n".format(epoch, average_epoch_loss))
-            counter.append(iteration_number)
+            counter.append(epoch)
             loss_history.append(loss_contrastive.item())
+
+            if epoch % 50 == 0:
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': best_loss,
+                }, Config.model_path + str(epoch))
 
             if average_epoch_loss < best_loss:
                 best_loss = average_epoch_loss
                 best_epoch = epoch
-                torch.save(net, Config.best_model_path)
+
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': best_loss,
+                }, Config.best_model_path)
+
                 print("------------------------Best epoch: ", epoch)
                 break_counter = 0
+            else:
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': best_loss,
+                }, Config.model_path)
 
             if break_counter >= 20:
                 print("Training break...")
                 #break
 
             break_counter += 1
-
-        torch.save(net, Config.model_path)
 
         print("best: ", best_epoch)
         Utils.show_plot(counter, loss_history)
