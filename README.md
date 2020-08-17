@@ -17,7 +17,7 @@ Set the training and testing parameters in ```python params/config.py``` file. R
 
 ## Results
 
-Accuracy in MiniImagenet compared to precious methods
+Accuracy in MiniImagenet compared to previous methods
 
 Method CNN | Accuracy(%)
 -------------|-----|
